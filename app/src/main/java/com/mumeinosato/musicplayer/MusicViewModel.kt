@@ -30,6 +30,10 @@ import kotlinx.coroutines.withTimeoutOrNull
 
 class MusicViewModel(app: Application) : AndroidViewModel(app) {
     private val repo = MusicRepository(app)
+    private val controllerFuture = MediaController.Builder(
+        app,
+        SessionToken(app, ComponentName(app, PlaybackService::class.java)),
+    ).buildAsync()
     private var controller: MediaController? = null
 
     /** コントローラー接続前に押された操作。接続したら実行する */
@@ -70,10 +74,13 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             tracks = withContext(Dispatchers.IO) { repo.localTracks() }
         }
-        val token = SessionToken(app, ComponentName(app, PlaybackService::class.java))
-        val future = MediaController.Builder(app, token).buildAsync()
-        future.addListener({
-            val c = future.get()
+        controllerFuture.addListener({
+            // 接続失敗やキャンセル（onCleared で releaseFuture 済み）のときは何もしない
+            val c = try {
+                controllerFuture.get()
+            } catch (e: Exception) {
+                return@addListener
+            }
             controller = c
             c.addListener(listener)
             // アプリを開き直したとき、既に再生中ならその状態を反映する
@@ -196,7 +203,10 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
 
     override fun onCleared() {
         controller?.removeListener(listener)
-        controller?.release()
+        // 接続待ちのまま破棄されたときも、後から繋がった controller が残らないようにする
+        MediaController.releaseFuture(controllerFuture)
+        controller = null
+        pendingAction = null
         super.onCleared()
     }
 }
