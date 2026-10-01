@@ -1,5 +1,6 @@
 package com.mumeinosato.musicplayer.player
 
+import android.content.Intent
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.Player
@@ -43,6 +44,15 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo) = session
+
+    /** 最近のアプリ画面からスワイプで消されたら、再生中でも止めてサービスを終わらせる */
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        session?.player?.run {
+            stop()
+            clearMediaItems()
+        }
+        stopSelf()
+    }
 
     override fun onDestroy() {
         session?.run {
