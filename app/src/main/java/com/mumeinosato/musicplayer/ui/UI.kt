@@ -39,7 +39,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -49,6 +48,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
@@ -152,13 +152,6 @@ private fun Header(status: String, isSyncing: Boolean, onSync: () -> Unit) {
 @Composable
 private fun SyncButton(isSyncing: Boolean, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
-    val transition = rememberInfiniteTransition(label = "sync")
-    val angle by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(tween(900, easing = LinearEasing), RepeatMode.Restart),
-        label = "syncAngle",
-    )
     val border by animateColorAsState(
         if (isSyncing) colors.primary else colors.onSurfaceVariant.copy(alpha = 0.3f),
         label = "syncBorder",
@@ -174,12 +167,30 @@ private fun SyncButton(isSyncing: Boolean, onClick: () -> Unit) {
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Canvas(
-            Modifier
-                .size(22.dp)
-                .rotate(if (isSyncing) angle else 0f)
-        ) { drawSyncIcon(iconColor) }
+        // 同期中だけ回す。止まっている間は毎フレームの再描画をしない
+        if (isSyncing) {
+            SpinningSyncIcon(iconColor)
+        } else {
+            Canvas(Modifier.size(22.dp)) { drawSyncIcon(iconColor) }
+        }
     }
+}
+
+@Composable
+private fun SpinningSyncIcon(color: Color) {
+    val transition = rememberInfiniteTransition(label = "sync")
+    val angle by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(tween(900, easing = LinearEasing), RepeatMode.Restart),
+        label = "syncAngle",
+    )
+    // 角度は描画フェーズで読み、毎フレームの再コンポーズを避ける
+    Canvas(
+        Modifier
+            .size(22.dp)
+            .graphicsLayer { rotationZ = angle }
+    ) { drawSyncIcon(color) }
 }
 
 @Composable
