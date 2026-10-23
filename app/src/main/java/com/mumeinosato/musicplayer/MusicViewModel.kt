@@ -42,6 +42,9 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
     /** 連続した再生エラー数。全曲エラーのときに無限スキップして電池を食わないための歯止め */
     private var consecutiveErrors = 0
 
+    /** 出力デバイス起因の再生エラーでの連続リトライ回数 */
+    private var audioSinkRetries = 0
+
     var tracks by mutableStateOf<List<Track>>(emptyList()); private set
     var currentIndex by mutableIntStateOf(0); private set
     var isPlaying by mutableStateOf(false); private set
@@ -51,7 +54,10 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
     private val listener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             this@MusicViewModel.isPlaying = isPlaying
-            if (isPlaying) consecutiveErrors = 0
+            if (isPlaying) {
+                consecutiveErrors = 0
+                audioSinkRetries = 0
+            }
         }
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
@@ -61,6 +67,16 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
         override fun onPlayerError(error: PlaybackException) {
             // ファイルが壊れている等で再生できない曲は飛ばす
             val c = controller ?: return
+            // Bluetooth の接続切替などで出力(AudioTrack)が一時的に失敗しただけなら、曲は飛ばさず同じ位置から再開する
+            if (error.errorCode == PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED ||
+                error.errorCode == PlaybackException.ERROR_CODE_AUDIO_TRACK_WRITE_FAILED
+            ) {
+                if (++audioSinkRetries <= MAX_AUDIO_SINK_RETRIES) {
+                    c.prepare()
+                    c.play()
+                    return
+                }
+            }
             if (++consecutiveErrors >= c.mediaItemCount) {
                 c.stop()
                 return
@@ -199,6 +215,7 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
     private companion object {
         const val POLL_INTERVAL_MS = 10_000L
         const val POLL_TIMEOUT_MS = 30 * 60 * 1000L
+        const val MAX_AUDIO_SINK_RETRIES = 3
     }
 
     override fun onCleared() {

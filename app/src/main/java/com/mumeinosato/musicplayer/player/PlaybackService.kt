@@ -4,7 +4,6 @@ import android.content.Intent
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.Player
-import androidx.media3.common.TrackSelectionParameters.AudioOffloadPreferences
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
@@ -28,14 +27,6 @@ class PlaybackService : MediaSessionService() {
             .setWakeMode(C.WAKE_MODE_LOCAL)
             .build()
             .apply {
-                // 対応端末では音声デコードを DSP にオフロードして消費電力を下げる（非対応なら通常再生）
-                trackSelectionParameters = trackSelectionParameters.buildUpon()
-                    .setAudioOffloadPreferences(
-                        AudioOffloadPreferences.Builder()
-                            .setAudioOffloadMode(AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_ENABLED)
-                            .build()
-                    )
-                    .build()
                 // 常にシャッフル＋全曲ループ
                 shuffleModeEnabled = true
                 repeatMode = Player.REPEAT_MODE_ALL
