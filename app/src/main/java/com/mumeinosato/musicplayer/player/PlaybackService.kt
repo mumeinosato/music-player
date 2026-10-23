@@ -6,7 +6,6 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
-import androidx.media3.common.TrackSelectionParameters.AudioOffloadPreferences
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
@@ -49,16 +48,8 @@ class PlaybackService : MediaSessionService() {
             .setWakeMode(C.WAKE_MODE_LOCAL)
             .build()
             .apply {
-                // 対応端末では音声デコードを DSP にオフロードして消費電力を下げる。
-                // ギャップレス必須にして、曲の切り替えでオフロードが成立しない場合は通常再生に戻す
-                trackSelectionParameters = trackSelectionParameters.buildUpon()
-                    .setAudioOffloadPreferences(
-                        AudioOffloadPreferences.Builder()
-                            .setAudioOffloadMode(AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_ENABLED)
-                            .setIsGaplessSupportRequired(true)
-                            .build()
-                    )
-                    .build()
+                // 音声オフロードは使わない。画面消灯中に CPU が眠ったまま曲の切り替えを迎えると、
+                // 次の曲を DSP に渡せず再生が止まる端末があるため（ローカル再生ならデコードも軽い）
                 // 常にシャッフル＋全曲ループ
                 shuffleModeEnabled = true
                 repeatMode = Player.REPEAT_MODE_ALL
