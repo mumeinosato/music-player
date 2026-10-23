@@ -1,9 +1,12 @@
 package com.mumeinosato.musicplayer.player
 
 import android.content.Intent
+import android.util.Log
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionParameters.AudioOffloadPreferences
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
@@ -11,6 +14,25 @@ import androidx.media3.session.MediaSessionService
 /** バックグラウンド再生用。ここで再生するのは file:// のローカルファイルのみ */
 class PlaybackService : MediaSessionService() {
     private var session: MediaSession? = null
+
+    /** 「急に止まる」原因の切り分け用。止まった直後の logcat（タグ Playback）で理由が分かる */
+    private val stopLogger = object : Player.Listener {
+        override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+            Log.i(TAG, "playWhenReady=$playWhenReady reason=$reason")
+        }
+
+        override fun onPlaybackStateChanged(playbackState: Int) {
+            Log.i(TAG, "state=$playbackState")
+        }
+
+        override fun onPlaybackSuppressionReasonChanged(playbackSuppressionReason: Int) {
+            Log.i(TAG, "suppression=$playbackSuppressionReason")
+        }
+
+        override fun onPlayerError(error: PlaybackException) {
+            Log.w(TAG, "error=${error.errorCodeName}", error)
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -27,9 +49,20 @@ class PlaybackService : MediaSessionService() {
             .setWakeMode(C.WAKE_MODE_LOCAL)
             .build()
             .apply {
+                // 対応端末では音声デコードを DSP にオフロードして消費電力を下げる。
+                // ギャップレス必須にして、曲の切り替えでオフロードが成立しない場合は通常再生に戻す
+                trackSelectionParameters = trackSelectionParameters.buildUpon()
+                    .setAudioOffloadPreferences(
+                        AudioOffloadPreferences.Builder()
+                            .setAudioOffloadMode(AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_ENABLED)
+                            .setIsGaplessSupportRequired(true)
+                            .build()
+                    )
+                    .build()
                 // 常にシャッフル＋全曲ループ
                 shuffleModeEnabled = true
                 repeatMode = Player.REPEAT_MODE_ALL
+                addListener(stopLogger)
             }
         session = MediaSession.Builder(this, player).build()
     }
@@ -43,6 +76,10 @@ class PlaybackService : MediaSessionService() {
             clearMediaItems()
         }
         stopSelf()
+    }
+
+    private companion object {
+        const val TAG = "Playback"
     }
 
     override fun onDestroy() {
